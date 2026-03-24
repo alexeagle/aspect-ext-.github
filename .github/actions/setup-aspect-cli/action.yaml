@@ -1,0 +1,99 @@
+name: Setup Aspect CLI
+description: Downloads and installs aspect-build/aspect-cli. Defaults to the latest prerelease/main build.
+
+inputs:
+  version:
+    description: |
+      Release version to install, e.g. "v2025.46.20".
+      Omit (or leave empty) to install the latest prerelease/main build.
+    required: false
+    default: ""
+
+outputs:
+  version:
+    description: The version string of the installed Aspect CLI
+    value: ${{ steps.install.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install Aspect CLI
+      id: install
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        INPUT_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+
+        REPO="aspect-build/aspect-cli"
+        UNAME_OS="$(uname -s)"
+        UNAME_ARCH="$(uname -m)"
+
+        if [[ -n "$INPUT_VERSION" ]]; then
+          # Stable release — assets use Rust target triples:
+          #   aspect-cli-x86_64-unknown-linux-musl
+          #   aspect-cli-aarch64-unknown-linux-musl
+          #   aspect-cli-x86_64-apple-darwin
+          #   aspect-cli-aarch64-apple-darwin
+          case "$UNAME_OS" in
+            Linux)  OS_SUFFIX="unknown-linux-musl" ;;
+            Darwin) OS_SUFFIX="apple-darwin" ;;
+            *) echo "Unsupported OS: $UNAME_OS" >&2; exit 1 ;;
+          esac
+          case "$UNAME_ARCH" in
+            x86_64)        ARCH="x86_64" ;;
+            aarch64|arm64) ARCH="aarch64" ;;
+            *) echo "Unsupported architecture: $UNAME_ARCH" >&2; exit 1 ;;
+          esac
+          TAG="$INPUT_VERSION"
+          ASSET_NAME="aspect-cli-${ARCH}-${OS_SUFFIX}"
+        else
+          # Prerelease/main — assets use Go-style names:
+          #   aspect_linux_amd64
+          #   aspect_linux_arm64
+          #   aspect_darwin_amd64
+          #   aspect_darwin_arm64
+          case "$UNAME_OS" in
+            Linux)  OS="linux" ;;
+            Darwin) OS="darwin" ;;
+            *) echo "Unsupported OS: $UNAME_OS" >&2; exit 1 ;;
+          esac
+          case "$UNAME_ARCH" in
+            x86_64)        ARCH="amd64" ;;
+            aarch64|arm64) ARCH="arm64" ;;
+            *) echo "Unsupported architecture: $UNAME_ARCH" >&2; exit 1 ;;
+          esac
+          TAG="prerelease/main"
+          ASSET_NAME="aspect_${OS}_${ARCH}"
+        fi
+
+        echo "Fetching release info for tag: $TAG"
+        RELEASE_JSON="$(gh api "repos/${REPO}/releases/tags/${TAG}")"
+
+        ASSET_URL="$(echo "$RELEASE_JSON" | jq -r --arg name "$ASSET_NAME" \
+          '.assets[] | select(.name == $name) | .url')"
+
+        if [[ -z "$ASSET_URL" ]]; then
+          echo "No asset found matching: $ASSET_NAME" >&2
+          echo "Available assets:" >&2
+          echo "$RELEASE_JSON" | jq -r '.assets[].name' >&2
+          exit 1
+        fi
+
+        VERSION="$(echo "$RELEASE_JSON" | jq -r '.tag_name')"
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+        INSTALL_DIR="$HOME/.local/bin"
+        mkdir -p "$INSTALL_DIR"
+
+        echo "Downloading $ASSET_NAME"
+        gh api \
+          -H "Accept: application/octet-stream" \
+          "$ASSET_URL" \
+          > "$INSTALL_DIR/aspect"
+
+        chmod +x "$INSTALL_DIR/aspect"
+
+        echo "$INSTALL_DIR" >> "$GITHUB_PATH"
+        echo "Installed aspect CLI $VERSION to $INSTALL_DIR/aspect"
