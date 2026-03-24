@@ -49,23 +49,23 @@ runs:
           TAG="$INPUT_VERSION"
           ASSET_NAME="aspect-cli-${ARCH}-${OS_SUFFIX}"
         else
-          # Prerelease/main — assets use Go-style names:
-          #   aspect_linux_amd64
-          #   aspect_linux_arm64
-          #   aspect_darwin_amd64
-          #   aspect_darwin_arm64
+          # Prerelease/main — assets use Rust target triples:
+          #   aspect-cli-x86_64-unknown-linux-musl
+          #   aspect-cli-aarch64-unknown-linux-musl
+          #   aspect-cli-x86_64-apple-darwin
+          #   aspect-cli-aarch64-apple-darwin
           case "$UNAME_OS" in
-            Linux)  OS="linux" ;;
-            Darwin) OS="darwin" ;;
+            Linux)  OS_SUFFIX="unknown-linux-musl" ;;
+            Darwin) OS_SUFFIX="apple-darwin" ;;
             *) echo "Unsupported OS: $UNAME_OS" >&2; exit 1 ;;
           esac
           case "$UNAME_ARCH" in
-            x86_64)        ARCH="amd64" ;;
-            aarch64|arm64) ARCH="arm64" ;;
+            x86_64)        ARCH="x86_64" ;;
+            aarch64|arm64) ARCH="aarch64" ;;
             *) echo "Unsupported architecture: $UNAME_ARCH" >&2; exit 1 ;;
           esac
           TAG="prerelease/main"
-          ASSET_NAME="aspect_${OS}_${ARCH}"
+          ASSET_NAME="aspect-cli-${ARCH}-${OS_SUFFIX}"
         fi
 
         echo "Fetching release info for tag: $TAG"
